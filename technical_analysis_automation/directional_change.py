@@ -1,7 +1,6 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import mplfinance as mpf
+import numpy as np
+import pandas as pd
 
 
 def directional_change(close: np.array, high: np.array, low: np.array, sigma: float):
@@ -17,7 +16,7 @@ def directional_change(close: np.array, high: np.array, low: np.array, sigma: fl
     for i in range(len(close)):
         if up_zig:  # Last extreme is a bottom
             if high[i] > tmp_max:
-                # New high, update 
+                # New high, update
                 tmp_max = high[i]
                 tmp_max_i = i
             elif close[i] < tmp_max - tmp_max * sigma:
@@ -34,7 +33,7 @@ def directional_change(close: np.array, high: np.array, low: np.array, sigma: fl
                 tmp_min_i = i
         else:  # Last extreme is a top
             if low[i] < tmp_min:
-                # New low, update 
+                # New low, update
                 tmp_min = low[i]
                 tmp_min_i = i
             elif close[i] > tmp_min + tmp_min * sigma:
@@ -65,8 +64,8 @@ def get_extremes(ohlc: pd.DataFrame, sigma: float):
     return extremes
 
 
-if __name__ == '__main__':
-    data = pd.read_csv('BTCUSDT3600.csv')
+def main():
+    data = pd.read_csv('.././data/BTCUSDT3600.csv')
     data['date'] = data['date'].astype('datetime64[s]')
     data = data.set_index('date')
     tops, bottoms = directional_change(data['close'].to_numpy(), data['high'].to_numpy(), data['low'].to_numpy(), 0.02)
@@ -77,3 +76,7 @@ if __name__ == '__main__':
         plt.plot(top[1], top[2], marker='o', color='green', markersize=4)
 
     plt.show()
+
+
+if __name__ == '__main__':
+    main()

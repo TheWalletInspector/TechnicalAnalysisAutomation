@@ -57,7 +57,7 @@ def rw_extremes(data: np.array, order: int):
     return tops, bottoms
 
 
-if __name__ == "__main__":
+def main():
     data = pd.read_csv('.././data/BTCUSDT86400.csv')
     data['date'] = data['date'].astype('datetime64[s]')
     data = data.set_index('date')
@@ -72,6 +72,10 @@ if __name__ == "__main__":
         plt.plot(idx[bottom[1]], bottom[2], marker='o', color='red')
 
     plt.show()
+
+
+if __name__ == "__main__":
+    main()
 
 # Scipy implementation (faster but use with care to not cheat with future data)
 # import scipy

@@ -1,17 +1,14 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import mplfinance as mpf
+import numpy as np
+import pandas as pd
 import scipy
-import math
-import pandas_ta as ta
-from directional_change import directional_change, get_extremes
 
+from directional_change import get_extremes
 
-data = pd.read_csv('BTCUSDT3600.csv')
+data = pd.read_csv('.././data/BTCUSDT3600.csv')
 data['date'] = data['date'].astype('datetime64[s]')
 data = data.set_index('date')
-plt.style.use('dark_background') 
+plt.style.use('dark_background')
 
 
 for sigma in [0.01, 0.02, 0.03, 0.04]:
@@ -19,15 +16,13 @@ for sigma in [0.01, 0.02, 0.03, 0.04]:
 
     # Find segment heights, retracement ratios
     extremes['seg_height'] = (extremes['ext_p'] - extremes['ext_p'].shift(1)).abs()
-    extremes['retrace_ratio'] = extremes['seg_height'] / extremes['seg_height'].shift(1) 
-    extremes['log_retrace_ratio'] = np.log(extremes['retrace_ratio']) 
+    extremes['retrace_ratio'] = extremes['seg_height'] / extremes['seg_height'].shift(1)
+    extremes['log_retrace_ratio'] = np.log(extremes['retrace_ratio'])
 
-
-
-    # Find kernal of log retrace ratios
-    kernal = scipy.stats.gaussian_kde(extremes['log_retrace_ratio'].dropna(), bw_method=0.01)
+    # Find kernel of log retrace ratios
+    kernel = scipy.stats.gaussian_kde(extremes['log_retrace_ratio'].dropna(), bw_method=0.01)
     retrace_range = np.arange(-3, 3, 0.001)
-    retrace_pdf = kernal(retrace_range)
+    retrace_pdf = kernel(retrace_range)
     retrace_pdf = pd.Series(retrace_pdf, index=np.exp(retrace_range))
     retrace_pdf.plot(color='orange', label='Retrace PDF')
     plt.axvline(0.618, label='0.618', color='blue')
@@ -35,4 +30,3 @@ for sigma in [0.01, 0.02, 0.03, 0.04]:
     plt.title("Retracement Density (Sigma=" + str(sigma) + ")")
     plt.legend()
     plt.show()
-
