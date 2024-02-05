@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def calculate_rolling_window(data_set: np.array, current_index: int, time_radius: int, is_top: bool) -> bool:
+def is_rolling_window_swing(data_set: np.array, current_index: int, time_radius: int, is_top: bool) -> bool:
     if current_index < time_radius * 2 + 1:
         return False
 
@@ -22,26 +22,26 @@ def calculate_rolling_window(data_set: np.array, current_index: int, time_radius
     return result_flag
 
 
-def rw_extremes(data_set: np.array, time_radius: int):
+def collate_swings(data_set: np.array, time_radius: int):
     # Rolling window local tops and bottoms
-    tops = []
-    bottoms = []
+    local_tops = []
+    local_bottoms = []
     for loop_index in range(len(data_set)):
-        if calculate_rolling_window(data_set, loop_index, time_radius, True):
+        if is_rolling_window_swing(data_set, loop_index, time_radius, True):
             # top[0] = confirmation index
             # top[1] = index of top
             # top[2] = price of top
-            top = [loop_index, loop_index - time_radius, data_set[loop_index - time_radius]]
-            tops.append(top)
+            local_top = [loop_index, loop_index - time_radius, data_set[loop_index - time_radius]]
+            local_tops.append(local_top)
 
-        if calculate_rolling_window(data_set, loop_index, time_radius, False):
+        if is_rolling_window_swing(data_set, loop_index, time_radius, False):
             # bottom[0] = confirmation index
             # bottom[1] = index of bottom
             # bottom[2] = price of bottom
-            bottom = [loop_index, loop_index - time_radius, data_set[loop_index - time_radius]]
-            bottoms.append(bottom)
+            local_bottom = [loop_index, loop_index - time_radius, data_set[loop_index - time_radius]]
+            local_bottoms.append(local_bottom)
 
-    return tops, bottoms
+    return local_tops, local_bottoms
 
 
 def main():
@@ -49,13 +49,13 @@ def main():
     data['date'] = data['date'].astype('datetime64[s]')
     data = data.set_index('date')
 
-    tops, bottoms = rw_extremes(data['close'].to_numpy(), 10)
+    swing_tops, swing_bottoms = collate_swings(data['close'].to_numpy(), 10)
     data['close'].plot()
     idx = data.index
-    for top in tops:
+    for top in swing_tops:
         plt.plot(idx[top[1]], top[2], marker='o', color='green')
 
-    for bottom in bottoms:
+    for bottom in swing_bottoms:
         plt.plot(idx[bottom[1]], bottom[2], marker='o', color='red')
 
     plt.show()
