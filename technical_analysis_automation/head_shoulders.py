@@ -1,16 +1,17 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import mplfinance as mpf
-from rolling_window import rw_top, rw_bottom
-from typing import List
 from collections import deque
 from dataclasses import dataclass
 
+import matplotlib.pyplot as plt
+import mplfinance as mpf
+import numpy as np
+import pandas as pd
 
-@dataclass
+from technical_analysis_automation_mine.technical_analysis_automation.rolling_window import rw_top, rw_bottom
+
+
+@dataclass(slots=True)
 class HSPattern:
-    # True if inverted, False if not. Inverted is "bullish" according to technical analysis dogma
+    # True if inverted, False if not. Inverted is "bullish" according to technical analysis dogma.
     inverted: bool
 
     # Indices of the parts of the H&S pattern
@@ -21,82 +22,92 @@ class HSPattern:
     head: int = -1
 
     # Price of the parts of the H&S pattern. _p stands for price.
-    l_shoulder_p: float = -1
-    r_shoulder_p: float = -1
-    l_armpit_p: float = -1
-    r_armpit_p: float = -1
-    head_p: float = -1
+    l_shoulder_price: float = -1.0
+    r_shoulder_price: float = -1.0
+    l_armpit_price: float = -1.0
+    r_armpit_price: float = -1.0
+    head_price: float = -1.0
 
     start_i: int = -1
     break_i: int = -1
-    break_p: float = -1
+    break_price: float = -1.0
 
-    neck_start: float = -1
-    neck_end: float = -1
+    neck_start: float = -1.0
+    neck_end: float = -1.0
 
     # Attributes
-    neck_slope: float = -1
-    head_width: float = -1
-    head_height: float = -1
-    pattern_r2: float = -1
+    neck_slope: float = -1.0
+    head_width: float = -1.0
+    head_height: float = -1.0
+    pattern_r2: float = -1.0
+
+    def compute_r2(self, price_data: np.array):
+        """
+        Computes the coefficient of determination (R^2 value) for the Head and Shoulders (H&S) pattern.
+
+        :param price_data: The array of price data points.
+        :param self: Instance of the HSPattern class representing a detected H&S pattern.
+        :return: The R^2 value for the H&S pattern, indicating the goodness of fit of the pattern to the data.
+        """
+
+        def compute_line_segment(start_price: float, end_price: float, start_index: int, end_index: int) -> np.array:
+            """:return: An array representing the price values along the segment."""
+            segment_slope = (end_price - start_price) / (end_index - start_index)
+            return start_price + np.arange(end_index - start_index) * segment_slope
+
+        pattern_segments = [
+            compute_line_segment(self.neck_start, self.l_shoulder_price, self.start_i, self.l_shoulder),
+            compute_line_segment(self.l_shoulder_price, self.l_armpit_price, self.l_shoulder, self.l_armpit),
+            compute_line_segment(self.l_armpit_price, self.head_price, self.l_armpit, self.head),
+            compute_line_segment(self.head_price, self.r_armpit_price, self.head, self.r_armpit),
+            compute_line_segment(self.r_armpit_price, self.r_shoulder_price, self.r_armpit, self.r_shoulder),
+            compute_line_segment(self.r_shoulder_price, self.break_price, self.r_shoulder, self.break_i)
+        ]
+
+        pattern_prices_model = np.concatenate(pattern_segments)
+        observed_prices = price_data[self.start_i:self.break_i]
+        average_price = np.mean(observed_prices)
+
+        sum_squared_residuals = np.sum((observed_prices - pattern_prices_model) ** 2.0)
+        sum_squared_total = np.sum((observed_prices - average_price) ** 2.0)
+
+        r_squared: float = 1.0 - sum_squared_residuals / sum_squared_total
+        self.pattern_r2 = r_squared
 
 
-def compute_pattern_r2(data: np.array, pat: HSPattern):
-    line0_slope = (pat.l_shoulder_p - pat.neck_start) / (pat.l_shoulder - pat.start_i)
-    line0 = pat.neck_start + np.arange(pat.l_shoulder - pat.start_i) * line0_slope
+def check_hs(extrema_indices: list[int], data: np.array, i: int, early_find: bool, invert: bool) -> HSPattern | None:
+    """
+    Checks if the given extrema indices represent a valid Head and Shoulders pattern.
 
-    line1_slope = (pat.l_armpit_p - pat.l_shoulder_p) / (pat.l_armpit - pat.l_shoulder)
-    line1 = pat.l_shoulder_p + np.arange(pat.l_armpit - pat.l_shoulder) * line1_slope
-
-    line2_slope = (pat.head_p - pat.l_armpit_p) / (pat.head - pat.l_armpit)
-    line2 = pat.l_armpit_p + np.arange(pat.head - pat.l_armpit) * line2_slope
-
-    line3_slope = (pat.r_armpit_p - pat.head_p) / (pat.r_armpit - pat.head)
-    line3 = pat.head_p + np.arange(pat.r_armpit - pat.head) * line3_slope
-
-    line4_slope = (pat.r_shoulder_p - pat.r_armpit_p) / (pat.r_shoulder - pat.r_armpit)
-    line4 = pat.r_armpit_p + np.arange(pat.r_shoulder - pat.r_armpit) * line4_slope
-
-    line5_slope = (pat.break_p - pat.r_shoulder_p) / (pat.break_i - pat.r_shoulder)
-    line5 = pat.r_shoulder_p + np.arange(pat.break_i - pat.r_shoulder) * line5_slope
-
-    raw_data = data[pat.start_i:pat.break_i]
-    hs_model = np.concatenate([line0, line1, line2, line3, line4, line5])
-    mean = np.mean(raw_data)
-
-    ss_res = np.sum((raw_data - hs_model) ** 2.0)
-    ss_tot = np.sum((raw_data - mean) ** 2.0)
-
-    r2 = 1.0 - ss_res / ss_tot
-    return r2
-
-
-def check_hs_pattern(extrema_indices: List[int], data: np.array, i: int, early_find: bool = False) -> HSPattern | None:
-    """ Returns a HSPattern if found, or None if not found """
-    # Unpack list
-    l_shoulder = extrema_indices[0]
-    l_armpit = extrema_indices[1]
-    head = extrema_indices[2]
-    r_armpit = extrema_indices[3]
+    :param extrema_indices: The indices of the local extrema in the data.
+    :param data: np.array of price data.
+    :param i: Position of the current price in the np.array of price data.
+    :param early_find: Whether to detect patterns early before confirmation by price breaking the neckline.
+    :param invert: Inverted or normal head and shoulders pattern.
+    :return: None if the pattern is invalid, otherwise a HSPattern instance representing the detected pattern.
+    """
+    l_shoulder, l_armpit, head, r_armpit = extrema_indices
 
     if i - r_armpit < 2:
         return None
 
-    # Find right shoulder as max price since r_armpit
-    r_shoulder = r_armpit + data[r_armpit + 1: i].argmax() + 1
+    # Find right shoulder as extreme price since r_armpit based on pattern type
+    extreme_func = np.argmax if not invert else np.argmin
+    r_shoulder = r_armpit + extreme_func(data[r_armpit + 1: i]) + 1
 
-    # Head must be higher than shoulders
-    if data[head] <= max(data[l_shoulder], data[r_shoulder]):
+    # Head must be extreme compared to shoulders
+    if (not invert and data[head] <= max(data[l_shoulder], data[r_shoulder])) or \
+            (invert and data[head] >= min(data[l_shoulder], data[r_shoulder])):
         return None
 
-    # Balance rule. Shoulders are above the others midpoint.
-    # A shoulder's midpoint is the midpoint between the shoulder and armpit
+    # Balance rule. Shoulders are extreme compared to the others' midpoint.
     r_midpoint = 0.5 * (data[r_shoulder] + data[r_armpit])
     l_midpoint = 0.5 * (data[l_shoulder] + data[l_armpit])
-    if data[l_shoulder] < r_midpoint or data[r_shoulder] < l_midpoint:
+    if (not invert and (data[l_shoulder] < r_midpoint or data[r_shoulder] < l_midpoint)) or \
+            (invert and (data[l_shoulder] > r_midpoint or data[r_shoulder] > l_midpoint)):
         return None
 
-    # Symmetry rule. time from shoulder to head are comparable
+    # Symmetry rule. Time from shoulder to head are comparable
     r_to_h_time = r_shoulder - head
     l_to_h_time = head - l_shoulder
     if r_to_h_time > 2.5 * l_to_h_time or l_to_h_time > 2.5 * r_to_h_time:
@@ -112,25 +123,22 @@ def check_hs_pattern(extrema_indices: List[int], data: np.array, i: int, early_f
 
     # Confirm pattern when price is halfway from right shoulder
     if early_find:
-        if data[i] > r_midpoint:
+        if (not invert and data[i] > r_midpoint) or (invert and data[i] < r_midpoint):
             return None
     else:
-
         # Price has yet to break neckline, unconfirmed
-        if data[i] > neck_val:
+        if (not invert and data[i] > neck_val) or (invert and data[i] < neck_val):
             return None
 
     # Find beginning of pattern. Neck to left shoulder
     head_width = r_armpit - l_armpit
-    pat_start = -1
-    neck_start = -1
+    pat_start = neck_start = -1
     for j in range(1, head_width):
         neck = data[l_armpit] + (l_shoulder - l_armpit - j) * neck_slope
-
         if l_shoulder - j < 0:
             return None
 
-        if data[l_shoulder - j] < neck:
+        if (not invert and data[l_shoulder - j] < neck) or (invert and data[l_shoulder - j] > neck):
             pat_start = l_shoulder - j
             neck_start = neck
             break
@@ -139,147 +147,57 @@ def check_hs_pattern(extrema_indices: List[int], data: np.array, i: int, early_f
         return None
 
     # Pattern confirmed if here :)
-    pat = HSPattern(inverted=False)
+    pattern = HSPattern(inverted=invert)
 
-    pat.l_shoulder = l_shoulder
-    pat.r_shoulder = r_shoulder
-    pat.l_armpit = l_armpit
-    pat.r_armpit = r_armpit
-    pat.head = head
+    pattern.l_shoulder = l_shoulder
+    pattern.r_shoulder = r_shoulder
+    pattern.l_armpit = l_armpit
+    pattern.r_armpit = r_armpit
+    pattern.head = head
 
-    pat.l_shoulder_p = data[l_shoulder]
-    pat.r_shoulder_p = data[r_shoulder]
-    pat.l_armpit_p = data[l_armpit]
-    pat.r_armpit_p = data[r_armpit]
-    pat.head_p = data[head]
+    pattern.l_shoulder_price = data[l_shoulder]
+    pattern.r_shoulder_price = data[r_shoulder]
+    pattern.l_armpit_price = data[l_armpit]
+    pattern.r_armpit_price = data[r_armpit]
+    pattern.head_price = data[head]
 
-    pat.start_i = pat_start
-    pat.break_i = i
-    pat.break_p = data[i]
+    pattern.start_i = pat_start
+    pattern.break_i = i
+    pattern.break_price = data[i]
 
-    pat.neck_start = neck_start
-    pat.neck_end = neck_val
+    pattern.neck_start = neck_start
+    pattern.neck_end = neck_val
 
-    pat.neck_slope = neck_slope
-    pat.head_width = head_width
-    pat.head_height = data[head] - (data[l_armpit] + (head - l_armpit) * neck_slope)
-    pat.pattern_r2 = compute_pattern_r2(data, pat)
+    pattern.neck_slope = neck_slope
+    pattern.head_width = head_width
 
-    # I experiemented with r-squared as a filter for H&S, but this can delay recognition.
+    if not invert:
+        pattern.head_height = data[head] - (data[l_armpit] + (head - l_armpit) * neck_slope)
+    else:
+        pattern.head_height = (data[l_armpit] + (head - l_armpit) * neck_slope) - data[head]
+
+    pattern.compute_r2(data)
+
+    # Experiemented with r-squared as a filter for H&S, but this can delay recognition.
     # It didn't seem terribly potent, may be useful as a filter in conjunction with other attributes
     # if one wanted to add a machine learning layer before trading these patterns.
 
     # if pat.pattern_r2 < 0.0:
     #    return None
 
-    return pat
+    return pattern
 
 
-def check_ihs_pattern(extrema_indices: List[int], data: np.array, i: int, early_find: bool = False) -> HSPattern | None:
-    # Unpack list
-    l_shoulder = extrema_indices[0]
-    l_armpit = extrema_indices[1]
-    head = extrema_indices[2]
-    r_armpit = extrema_indices[3]
+def find_patterns(data: np.array, order: int, early_find: bool = False):
+    """
+    Identifies potential Head and Shoulders (regular and inverted) patterns in the given data.
 
-    if i - r_armpit < 2:
-        return None
-
-    # Find right shoulder as max price since r_armpit
-    r_shoulder = r_armpit + data[r_armpit + 1: i].argmin() + 1
-
-    # Head must be lower than shoulders
-    if data[head] >= min(data[l_shoulder], data[r_shoulder]):
-        return None
-
-    # Balance rule. Shoulders are below the others midpoint.
-    # A shoulder's midpoint is the midpoint between the shoulder and armpit
-    r_midpoint = 0.5 * (data[r_shoulder] + data[r_armpit])
-    l_midpoint = 0.5 * (data[l_shoulder] + data[l_armpit])
-    if data[l_shoulder] > r_midpoint or data[r_shoulder] > l_midpoint:
-        return None
-
-    # Symmetry rule. time from shoulder to head are comparable
-    r_to_h_time = r_shoulder - head
-    l_to_h_time = head - l_shoulder
-    if r_to_h_time > 2.5 * l_to_h_time or l_to_h_time > 2.5 * r_to_h_time:
-        return None
-
-    # Compute neckline
-    neck_run = r_armpit - l_armpit
-    neck_rise = data[r_armpit] - data[l_armpit]
-    neck_slope = neck_rise / neck_run
-
-    # neckline value at current index
-    neck_val = data[l_armpit] + (i - l_armpit) * neck_slope
-
-    # Confirm pattern when price is halfway from right shoulder
-    if early_find:
-        if data[i] < r_midpoint:
-            return None
-    else:
-
-        # Price has yet to break neckline, unconfirmed
-        if data[i] < neck_val:
-            return None
-
-    # Find beginning of pattern. Neck to left shoulder
-    head_width = r_armpit - l_armpit
-    pat_start = -1
-    neck_start = -1
-    for j in range(1, head_width):
-        neck = data[l_armpit] + (l_shoulder - l_armpit - j) * neck_slope
-
-        if l_shoulder - j < 0:
-            return None
-
-        if data[l_shoulder - j] > neck:
-            pat_start = l_shoulder - j
-            neck_start = neck
-            break
-
-    if pat_start == -1:
-        return None
-
-    # Pattern confirmed if here :)
-    pat = HSPattern(inverted=True)
-
-    pat.l_shoulder = l_shoulder
-    pat.r_shoulder = r_shoulder
-    pat.l_armpit = l_armpit
-    pat.r_armpit = r_armpit
-    pat.head = head
-
-    pat.l_shoulder_p = data[l_shoulder]
-    pat.r_shoulder_p = data[r_shoulder]
-    pat.l_armpit_p = data[l_armpit]
-    pat.r_armpit_p = data[r_armpit]
-    pat.head_p = data[head]
-
-    pat.start_i = pat_start
-    pat.break_i = i
-    pat.break_p = data[i]
-
-    pat.neck_start = neck_start
-    pat.neck_end = neck_val
-    pat.pattern_r2 = compute_pattern_r2(data, pat)
-
-    pat.neck_slope = neck_slope
-    pat.head_width = head_width
-    pat.head_height = (data[l_armpit] + (head - l_armpit) * neck_slope) - data[head]
-    pat.pattern_r2 = compute_pattern_r2(data, pat)
-
-    # if pat.pattern_r2 < 0.0:
-    #    return None
-
-    return pat
-
-
-def find_hs_patterns(data: np.array, order: int, early_find: bool = False):
-    assert (order >= 1)
-
-    # head and shoulders top checked from/after a confirmed bottom (before right shoulder)
-    # head and shoulders bottom checked from/after a confirmed top
+    :param data: The price data as a NumPy array.
+    :param order: The order parameter for the rolling window used to identify local minima and maxima.
+    :param early_find: Whether to detect patterns early before confirmation by price breaking the neckline.
+    :return: A tuple containing lists of identified regular and inverted Head and Shoulders patterns.
+    """
+    assert (order >= 1), "Order must be at least 1."
 
     last_is_top = False
     recent_extrema = deque(maxlen=5)
@@ -335,72 +253,105 @@ def find_hs_patterns(data: np.array, order: int, early_find: bool = False):
             ihs_extrema = list(recent_extrema)[0:4]
             hs_extrema = list(recent_extrema)[1:5]
 
-        if ihs_lock or not ihs_alternating:
-            ihs_pat = None
-        else:
-            ihs_pat = check_ihs_pattern(ihs_extrema, data, i, early_find)
+        def check_lock(lock, alternating, extrema, invert) -> HSPattern | None:
+            if lock or not alternating:
+                return None
+            return check_hs(extrema, data, i, early_find, invert=invert)
 
-        if hs_lock or not hs_alternating:
-            hs_pat = None
-        else:
-            hs_pat = check_hs_pattern(hs_extrema, data, i, early_find)
+        ihs_pattern = check_lock(ihs_lock, ihs_alternating, ihs_extrema, True)
+        hs_pattern = check_lock(hs_lock, hs_alternating, hs_extrema, False)
 
-        if hs_pat is not None:
+        if hs_pattern is not None:
             hs_lock = True
-            hs_patterns.append(hs_pat)
+            hs_patterns.append(hs_pattern)
 
-        if ihs_pat is not None:
+        if ihs_pattern is not None:
             ihs_lock = True
-            ihs_patterns.append(ihs_pat)
+            ihs_patterns.append(ihs_pattern)
 
     return hs_patterns, ihs_patterns
 
 
-def plot_hs(candle_data, pattern: HSPattern, pad: int = 2):
-    if pad < 0:
-        pad = 0
+def plot_hs(data: pd.DataFrame, pattern: HSPattern, padding: int, filepath: str = None):
+    """
+    Plots the Head and Shoulders pattern with the provided data and padding.
 
-    idx = candle_data.index
-    data = candle_data.iloc[pattern.start_i:pattern.break_i + 1 + pad]
+    :param data: Data to plot.
+    :param pattern: Pattern details to highlight in the plot.
+    :param padding: Number of periods beyond the pattern to include in the plot for additional context.
+    :param filepath: The file path to save the plot to.
+    """
+    padding = max(padding, 0)
+
+    idx = data.index
+    chart_start = max(pattern.start_i - padding, 0)
+    chart_end = min(pattern.break_i + 1 + padding, len(data))
+    data = data.iloc[chart_start:chart_end]
 
     plt.style.use('dark_background')
-    fig = plt.gcf()
-    ax = fig.gca()
+    fig, ax = plt.subplots(figsize=(10, 6))  # Adjust figsize to ensure adequate space for labels
+    datetime_format = '%m-%d'  # Just month and day for x-axis labels
 
-    l0 = [(idx[pattern.start_i], pattern.neck_start), (idx[pattern.l_shoulder], pattern.l_shoulder_p)]
-    l1 = [(idx[pattern.l_shoulder], pattern.l_shoulder_p), (idx[pattern.l_armpit], pattern.l_armpit_p)]
-    l2 = [(idx[pattern.l_armpit], pattern.l_armpit_p), (idx[pattern.head], pattern.head_p)]
-    l3 = [(idx[pattern.head], pattern.head_p), (idx[pattern.r_armpit], pattern.r_armpit_p)]
-    l4 = [(idx[pattern.r_armpit], pattern.r_armpit_p), (idx[pattern.r_shoulder], pattern.r_shoulder_p)]
-    l5 = [(idx[pattern.r_shoulder], pattern.r_shoulder_p), (idx[pattern.break_i], pattern.neck_end)]
-    neck = [(idx[pattern.start_i], pattern.neck_start), (idx[pattern.break_i], pattern.neck_end)]
+    # Define the pattern lines to be drawn on the plot
+    pattern_lines = [
+        [(idx[pattern.start_i], pattern.neck_start), (idx[pattern.l_shoulder], pattern.l_shoulder_price)],
+        [(idx[pattern.l_shoulder], pattern.l_shoulder_price), (idx[pattern.l_armpit], pattern.l_armpit_price)],
+        [(idx[pattern.l_armpit], pattern.l_armpit_price), (idx[pattern.head], pattern.head_price)],
+        [(idx[pattern.head], pattern.head_price), (idx[pattern.r_armpit], pattern.r_armpit_price)],
+        [(idx[pattern.r_armpit], pattern.r_armpit_price), (idx[pattern.r_shoulder], pattern.r_shoulder_price)],
+        [(idx[pattern.r_shoulder], pattern.r_shoulder_price), (idx[pattern.break_i], pattern.neck_end)],
+        [(idx[pattern.start_i], pattern.neck_start), (idx[pattern.break_i], pattern.neck_end)]
+    ]
 
-    mpf.plot(data, alines=dict(alines=[l0, l1, l2, l3, l4, l5, neck], colors=['w', 'w', 'w', 'w', 'w', 'w', 'r']),
-             type='candle', style='charles', ax=ax)
-    x = len(data) // 2 - len(data) * 0.1
-    if pattern.inverted:
-        y = pattern.head_p + pattern.head_height * 1.25
-    else:
-        y = pattern.head_p - pattern.head_height * 1.25
+    ax.grid(True, color='navy', alpha=0.6)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.set_title(
+        f"{'Inverted ' * pattern.inverted}Head and Shoulders Pattern {idx[pattern.start_i].strftime('%Y-%m-%d %H:%M')}",
+        fontsize=16)
 
-    ax.text(x, y,
-            f"BTC-USDT 1H ({idx[pattern.start_i].strftime('%Y-%m-%d %H:%M')} - "
-            f"{idx[pattern.break_i].strftime('%Y-%m-%d %H:%M')})", color='white', fontsize='xx-large')
+    mpf.plot(
+        data,
+        type='candle',
+        style='charles',  # Green and red candles
+        ax=ax,
+        datetime_format=datetime_format,
+        alines=dict(
+            alines=pattern_lines,
+            colors=['w', 'w', 'w', 'w', 'w', 'w', 'r'],  # Colors for lines, 'r' highlights the neckline
+            linewidths=[0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1]
+        ),
+        volume="volume" in [col.lower() for col in data.columns],
+        show_nontrading=True,
+        tight_layout=True,
+        warn_too_much_data=len(data) + 1,
+    )
+
+    if filepath:
+        fig = plt.gcf()
+        fig.savefig(filepath)
+
     plt.show()
 
 
-def show_detected_patterns():
-    data = pd.read_csv('.././data/BTCUSDT3600.csv')
+def main():
+    data = pd.read_csv('../../data/BTCUSDT3600.csv')
     data['date'] = data['date'].astype('datetime64[s]')
     data = data.set_index('date')
-
     data = np.log(data)
     dat_slice = data['close'].to_numpy()
 
-    hs_patterns, ihs_patterns = find_hs_patterns(dat_slice, 6, early_find=False)
+    padding = 5
+    order = 15
+    filepath = 'hs_pattern'
 
-    plot_hs(data, hs_patterns[0], pad=0)
+    hs_patterns, ihs_patterns = find_patterns(dat_slice, order, early_find=False)
+
+    plot_hs(data, hs_patterns[-1], padding=padding, filepath=filepath + ".png")
+    plot_hs(data, ihs_patterns[-1], padding=padding, filepath=filepath + "_inverted.png")
 
 
 if __name__ == '__main__':
-    show_detected_patterns()
+    main()
