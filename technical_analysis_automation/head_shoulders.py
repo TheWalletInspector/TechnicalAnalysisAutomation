@@ -6,7 +6,7 @@ import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
-from technical_analysis_automation_mine.technical_analysis_automation.rolling_window import rw_top, rw_bottom
+from rolling_window import rw_top, rw_bottom
 
 
 @dataclass(slots=True)
@@ -188,13 +188,16 @@ def check_hs(extrema_indices: list[int], data: np.array, i: int, early_find: boo
     return pattern
 
 
-def find_patterns(data: np.array, order: int, early_find: bool = False):
+def find_patterns(data: np.array, order: int = 6, early_find: bool = False):
     """
     Identifies potential Head and Shoulders (regular and inverted) patterns in the given data.
 
     :param data: The price data as a NumPy array.
-    :param order: The order parameter for the rolling window used to identify local minima and maxima.
-    :param early_find: Whether to detect patterns early before confirmation by price breaking the neckline.
+    :param order: Used by the rolling window function to find local minima and maxima. Lower = more sensitive.
+    Defaults to 6.
+    :param early_find: Whether to detect patterns early before confirmation by price breaking the neckline. Setting to
+    False means waiting until the pattern is fully formed to detect it, but can result in missing the opportunity to
+    get in.
     :return: A tuple containing lists of identified regular and inverted Head and Shoulders patterns.
     """
     assert (order >= 1), "Order must be at least 1."
@@ -299,11 +302,11 @@ def plot_hs(data: pd.DataFrame, pattern: HSPattern, padding: int, filepath: str 
         [(idx[pattern.l_armpit], pattern.l_armpit_price), (idx[pattern.head], pattern.head_price)],
         [(idx[pattern.head], pattern.head_price), (idx[pattern.r_armpit], pattern.r_armpit_price)],
         [(idx[pattern.r_armpit], pattern.r_armpit_price), (idx[pattern.r_shoulder], pattern.r_shoulder_price)],
-        [(idx[pattern.r_shoulder], pattern.r_shoulder_price), (idx[pattern.break_i], pattern.neck_end)],
+        [(idx[pattern.r_shoulder], pattern.r_shoulder_price), (idx[pattern.break_i], pattern.break_price)],
         [(idx[pattern.start_i], pattern.neck_start), (idx[pattern.break_i], pattern.neck_end)]
     ]
 
-    ax.grid(True, color='navy', alpha=0.6)
+    ax.grid(True, color='#4e5294', alpha=0.4)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     # ax.spines['bottom'].set_visible(False)
@@ -343,14 +346,15 @@ def main():
     data = np.log(data)
     dat_slice = data['close'].to_numpy()
 
-    padding = 5
+    padding = 10
     order = 15
     filepath = 'hs_pattern'
 
-    hs_patterns, ihs_patterns = find_patterns(dat_slice, order, early_find=False)
+    hs_patterns, ihs_patterns = find_patterns(dat_slice, order, early_find=True)
 
-    plot_hs(data, hs_patterns[-1], padding=padding, filepath=filepath + ".png")
-    plot_hs(data, ihs_patterns[-1], padding=padding, filepath=filepath + "_inverted.png")
+    for i in range(len(hs_patterns)):
+        plot_hs(data, hs_patterns[i], padding=padding, filepath=filepath + ".png")
+        plot_hs(data, ihs_patterns[i], padding=padding, filepath=filepath + "_inverted.png")
 
 
 if __name__ == '__main__':

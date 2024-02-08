@@ -133,11 +133,12 @@ def find_xabcd(ohlc: pd.DataFrame, extremes: pd.DataFrame, err_thresh: float = 0
 
     output = {}
     for pat in ALL_PATTERNS:
-        pat_data = {}
-        pat_data['bull_signal'] = np.zeros(len(ohlc))
-        pat_data['bull_patterns'] = []
-        pat_data['bear_signal'] = np.zeros(len(ohlc))
-        pat_data['bear_patterns'] = []
+        pat_data = {
+            'bull_signal': np.zeros(len(ohlc)),
+            'bull_patterns': [],
+            'bear_signal': np.zeros(len(ohlc)),
+            'bear_patterns': []
+        }
         output[pat.name] = pat_data
 
     first_conf = extremes.index[0]
