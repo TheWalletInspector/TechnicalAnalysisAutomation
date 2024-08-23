@@ -25,6 +25,11 @@ class TestSwingChartCandlePlotter:
                                              is_top=True)
         assert result is True
 
+    # not np.greater(data_set[3 + 1], 4) and
+    # not np.greater(data_set[3 - 1], 4)
+    # for loop_index in range(1, 2 + 1)
+
+
     def test__is_data_point_a_local_swing__should_not_be_a_local_swing_top(self) -> None:
         result = is_data_point_a_local_swing(data_set=np.array([1, 2, 3, 4, 5, 4, 3, 2, 1]),
                                              current_index=6,

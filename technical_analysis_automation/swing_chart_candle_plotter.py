@@ -10,7 +10,8 @@ def is_data_point_a_local_swing(data_set: np.array, current_index: int, time_rad
     """
     Check if the current index is a local swing based on the data set and time radius.
     """
-    if current_index < time_radius * 2 + 1:
+    current_index = current_index - 1
+    if current_index < time_radius:
         print("")
         print(f"current_index: {current_index} is less than time_radius * 2 + 1: {time_radius * 2 + 1}")
         logging.info(f"current_index: {current_index} does not have enough data points to form a rolling window")
@@ -26,6 +27,16 @@ def is_data_point_a_local_swing(data_set: np.array, current_index: int, time_rad
     print(f"time_span_starting_value: {time_span_starting_value}")
 
     # If any of the data points within the time span are greater than the starting value, return False (not a local extreme)
+    for loop_index in range(1, time_radius + 1):
+        condition1 = not comparison_operator(data_set[time_span_starting_index + loop_index], time_span_starting_value)
+        print(f"data_set[time_span_starting_index + loop_index]: {data_set[time_span_starting_index + loop_index], time_span_starting_value}")
+
+        condition2 = not comparison_operator(data_set[time_span_starting_index - loop_index], time_span_starting_value)
+        print(f"data_set[time_span_starting_index + loop_index]: {data_set[time_span_starting_index + loop_index], time_span_starting_value}")
+
+        print(f"loop_index: {loop_index}, condition1: {condition1}, condition2: {condition2}")
+
+
     return all(
         not comparison_operator(data_set[time_span_starting_index + loop_index], time_span_starting_value) and
         not comparison_operator(data_set[time_span_starting_index - loop_index], time_span_starting_value)
@@ -33,7 +44,7 @@ def is_data_point_a_local_swing(data_set: np.array, current_index: int, time_rad
     )
 
 
-def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int):
+def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int) -> (pd.DataFrame, pd.DataFrame):
     local_tops = [
         [index_of_bar_to_test, index_of_bar_to_test - time_radius, data_set[index_of_bar_to_test - time_radius]]
         for index_of_bar_to_test in range(len(data_set))
@@ -53,7 +64,7 @@ def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int):
     )
 
 
-def main():
+def main() -> None:
     data = pd.read_csv('.././data/BTCUSDT86400.csv')
     data['date'] = data['date'].astype('datetime64[s]')
     data = data.set_index('date')
@@ -68,7 +79,7 @@ def main():
 
     # Plotting as a trading bar chart
     fig, axlist = mpf.plot(data,
-                           type='candle',  # candlestick chart
+                           type='bar',  # candlestick chart
                            style='yahoo',  # chart style
                            addplot=[
                                mpf.make_addplot(data['swing_high'], color='green', linestyle='solid'),
