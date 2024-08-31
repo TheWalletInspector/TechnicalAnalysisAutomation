@@ -1,9 +1,21 @@
 import logging
+from dataclasses import dataclass
 
 import mplfinance as mpf
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+
+
+@dataclass
+class bar:
+    index: int
+    date: str | None
+    high: float | None
+    low: float | None
+    open: float | None
+    close: float | None
+    volume: float | None
 
 
 def _is_local_extreme(data_set: np.array, current_index: int, time_radius: int, is_top: bool) -> bool:
@@ -18,8 +30,7 @@ def _is_local_extreme(data_set: np.array, current_index: int, time_radius: int, 
     window = data_set[start:end]
 
     comparison_operator = np.max if is_top else np.min
-    is_extreme = data_set[current_index] == comparison_operator(window) and np.sum(
-        window == data_set[current_index]) == 1
+    is_extreme = data_set[current_index] == comparison_operator(window) and np.sum(window == data_set[current_index]) == 1
 
     return bool(is_extreme)
 
@@ -28,8 +39,34 @@ def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int) 
     """
     Detects swing highs and lows across the data set
     """
+    bars = []
+    for index, row in data_set.iterrows():
+        bar_instance = bar(
+            index=index,
+            date=index,
+            high=row['high'],
+            low=row['low'],
+            open=row['open'],
+            close=row['close'],
+            volume=None  # Assuming volume is not available in the provided data
+        )
+        bars.append(bar_instance)
+
+        if _is_local_extreme(data_set=data_set,
+                             current_index=index_of_bar_to_test,
+                             time_radius=time_radius,
+                             is_top=True):
+            print(f"Local top detected at index: {index_of_bar_to_test}")
+
+        if _is_local_extreme(data_set=data_set,
+                             current_index=index_of_bar_to_test,
+                             time_radius=time_radius,
+                             is_top=False):
+            print(f"Local bottom detected at index: {index_of_bar_to_test}")
+
+
     local_tops = [
-        [index_of_bar_to_test, data_set[index_of_bar_to_test]]
+        bar(index=index_of_bar_to_test, date=None, high=data_set[index_of_bar_to_test], low=None, open=None, close=None, volume=None)
         for index_of_bar_to_test in range(len(data_set))
         if _is_local_extreme(data_set=data_set,
                              current_index=index_of_bar_to_test,
@@ -38,7 +75,7 @@ def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int) 
     ]
 
     local_bottoms = [
-        [index_of_bar_to_test, data_set[index_of_bar_to_test]]
+        bar(date=index_of_bar_to_test, high=None, low=data_set[index_of_bar_to_test], open=None, close=None, volume=None)
         for index_of_bar_to_test in range(len(data_set))
         if _is_local_extreme(data_set=data_set,
                              current_index=index_of_bar_to_test,
@@ -47,8 +84,8 @@ def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int) 
     ]
 
     return (
-        pd.DataFrame(local_tops, columns=["index_of_swing", "price_of_swing"]),
-        pd.DataFrame(local_bottoms, columns=["index_of_swing", "price_of_swing"])
+        pd.DataFrame([vars(top) for top in local_tops], columns=["date", "high", "low", "open", "close", "volume"]),
+        pd.DataFrame([vars(bottom) for bottom in local_bottoms], columns=["date", "high", "low", "open", "close", "volume"])
     )
 
 
