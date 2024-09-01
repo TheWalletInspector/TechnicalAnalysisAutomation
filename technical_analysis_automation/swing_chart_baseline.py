@@ -1,5 +1,4 @@
 import logging
-from dataclasses import dataclass
 
 import mplfinance as mpf
 import numpy as np
@@ -7,18 +6,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 
-@dataclass
-class bar:
-    index: int
-    date: str | None
-    high: float | None
-    low: float | None
-    open: float | None
-    close: float | None
-    volume: float | None
-
-
-def _is_local_extreme(data_set: np.array, current_index: int, time_radius: int, comparison_operator) -> bool:
+def _is_local_extreme(data_set: np.array, current_index: int, time_radius: int, is_top: bool) -> bool:
     if current_index < time_radius:
         print("")
         print(f"current_index: {current_index} is less than time_radius: {time_radius}")
@@ -29,6 +17,7 @@ def _is_local_extreme(data_set: np.array, current_index: int, time_radius: int, 
     end = min(len(data_set), current_index + time_radius + 1)
     window = data_set[start:end]
 
+    comparison_operator = np.max if is_top else np.min
     is_extreme = data_set[current_index] == comparison_operator(window) and np.sum(
         window == data_set[current_index]) == 1
 
@@ -39,34 +28,27 @@ def detect_swing_extremes_across_data_set(data_set: np.array, time_radius: int) 
     """
     Detects swing highs and lows across the data set
     """
-    swing_extremes = []
-    for index, row in data_set.iterrows():
-        current_bar = bar(
-            index=index,
-            date=row['date'],
-            high=row['high'],
-            low=row['low'],
-            open=row['open'],
-            close=row['close'],
-            volume=None  # Assuming volume is not available in the provided data
-        )
+    local_tops = [
+        [index_of_bar_to_test, data_set[index_of_bar_to_test]]
+        for index_of_bar_to_test in range(len(data_set))
+        if _is_local_extreme(data_set=data_set,
+                             current_index=index_of_bar_to_test,
+                             time_radius=time_radius,
+                             is_top=True)
+    ]
 
-        comparison_operator = np.max if current_bar.open > current_bar.close else np.min
-        _is_local_extreme(data_set=data_set,
-                          current_index=index,
-                          time_radius=time_radius,
-                          comparison_operator=comparison_operator)
-        swing_extremes.append(current_bar)
-
-        comparison_operator = np.min if current_bar.open < current_bar.close else np.max
-        _is_local_extreme(data_set=data_set,
-                          current_index=index,
-                          time_radius=time_radius,
-                          comparison_operator=comparison_operator)
-        swing_extremes.append(current_bar)
+    local_bottoms = [
+        [index_of_bar_to_test, data_set[index_of_bar_to_test]]
+        for index_of_bar_to_test in range(len(data_set))
+        if _is_local_extreme(data_set=data_set,
+                             current_index=index_of_bar_to_test,
+                             time_radius=time_radius,
+                             is_top=False)
+    ]
 
     return (
-        pd.DataFrame([vars(top) for top in swing_extremes], columns=["date", "high", "low", "open", "close", "volume"])
+        pd.DataFrame(local_tops, columns=["index_of_swing", "price_of_swing"]),
+        pd.DataFrame(local_bottoms, columns=["index_of_swing", "price_of_swing"])
     )
 
 
