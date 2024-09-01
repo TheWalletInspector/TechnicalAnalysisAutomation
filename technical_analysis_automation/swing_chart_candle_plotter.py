@@ -5,7 +5,8 @@ from enum import Enum, auto
 import numpy as np
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class BarType(Enum):
@@ -25,6 +26,7 @@ class Bar:
     close: float | None
     volume: float | None
     bar_type: BarType | None = None
+    to_plot: str | None = None
 
 
 def _detect_bar_type(current_bar: Bar, previous_bar: Bar) -> BarType:
@@ -52,23 +54,22 @@ def _get_comparison_operators(bar_type: BarType, current_bar: Bar) -> tuple:
 
 
 def _is_local_extreme(data_set_bars: list[Bar], current_index: int, time_radius: int, comparison_operator) -> bool:
-    if current_index < time_radius or current_index > len(data_set_bars) - time_radius:
+    if current_index < time_radius or current_index > len(data_set_bars) - time_radius - 1:
         logging.info(f"current_index: {current_index} does not have enough data points to form a rolling window")
         return False
 
     data_set_array = np.array([bar.high if comparison_operator == np.max else bar.low for bar in data_set_bars])
+
+    # print("is_local_extreme")
+    # print(f"comparison_operator: {comparison_operator.__name__}")
+    # print(f"data_set_array: {data_set_array}")
+
     start = max(0, current_index - time_radius)
     end = min(len(data_set_array), current_index + time_radius + 1)
     window = data_set_array[start:end]
 
     is_extreme = data_set_array[current_index] == comparison_operator(window) and np.sum(
         window == data_set_array[current_index]) == 1
-
-    logging.debug(f"current_index: {current_index}")
-    logging.debug(f"start: {start}")
-    logging.debug(f"end: {end}")
-    logging.debug(f"window: {window}")
-    logging.debug(f"is_extreme: {is_extreme}")
 
     return bool(is_extreme)
 
@@ -85,14 +86,29 @@ def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius:
 
             comparison_operators = _get_comparison_operators(bar_type=current_bar.bar_type, current_bar=current_bar)
 
-            print(f"current_bar: {current_bar}")
-
             for operator in comparison_operators:
                 if _is_local_extreme(data_set_bars, current_bar.index, time_radius, operator):
-                    swing_extremes.append(current_bar)
+                    to_plot_value = "high" if operator == np.max else "low"
+
+                    new_bar = Bar(
+                        index=current_bar.index,
+                        date=current_bar.date,
+                        high=current_bar.high,
+                        low=current_bar.low,
+                        open=current_bar.open,
+                        close=current_bar.close,
+                        volume=current_bar.volume,
+                        bar_type=current_bar.bar_type,
+                        to_plot=to_plot_value
+                    )
+                    swing_extremes.append(new_bar)
+
+                    # print(f"detect: operator: {operator.__name__}")
+                    # print(f"detect: swing_extremes: {swing_extremes}")
+                    # print("=====================================")
 
     return pd.DataFrame([vars(extreme) for extreme in swing_extremes],
-                        columns=["index", "date", "high", "low", "open", "close", "volume", "bar_type"])
+                        columns=["index", "date", "high", "low", "open", "close", "volume", "bar_type", "to_plot"])
 
 
 def _parse_data_set(data: pd.DataFrame) -> list[Bar]:
