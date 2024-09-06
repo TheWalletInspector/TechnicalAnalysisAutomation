@@ -1,7 +1,10 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
+from pprint import pprint
 
+import matplotlib.pyplot as plt
+import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
@@ -30,15 +33,17 @@ class Bar:
 
 
 def _detect_bar_type(current_bar: Bar, previous_bar: Bar) -> BarType:
-    if current_bar.high > previous_bar.high and current_bar.low > previous_bar.low:
+    if current_bar.high > previous_bar.high and current_bar.low >= previous_bar.low:
         return BarType.UP_BAR
-    elif current_bar.high < previous_bar.high and current_bar.low < previous_bar.low:
+    elif current_bar.high <= previous_bar.high and current_bar.low < previous_bar.low:
         return BarType.DOWN_BAR
-    elif current_bar.high < previous_bar.high and current_bar.low > previous_bar.low:
+    elif current_bar.high <= previous_bar.high and current_bar.low >= previous_bar.low:
         return BarType.INSIDE_BAR
     elif current_bar.high > previous_bar.high and current_bar.low < previous_bar.low:
         return BarType.OUTSIDE_BAR
     else:
+        print(f"current_bar: {vars(current_bar)}")
+        print(f"previous_bar: {vars(previous_bar)}")
         raise ValueError("Bar type not recognized")
 
 
@@ -103,12 +108,28 @@ def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius:
                     )
                     swing_extremes.append(new_bar)
 
-                    # print(f"detect: operator: {operator.__name__}")
-                    # print(f"detect: swing_extremes: {swing_extremes}")
-                    # print("=====================================")
-
     return pd.DataFrame([vars(extreme) for extreme in swing_extremes],
                         columns=["index", "date", "high", "low", "open", "close", "volume", "bar_type", "to_plot"])
+
+
+def plot_ohlc_with_swings(data: pd.DataFrame, swings: pd.DataFrame) -> None:
+    # Plot the OHLC chart
+    ohlc_data = data.set_index('date')
+    mpf.plot(ohlc_data, type='ohlc', style='charles', title='OHLC Chart with Swings', ylabel='Price', volume=True)
+
+    # Plot the swings
+    fig, ax = plt.subplots()
+    mpf.plot(ohlc_data, type='ohlc', style='charles', ax=ax, volume=False)
+
+    for i in range(1, len(swings)):
+        if swings.iloc[i - 1]['to_plot'] == 'high' and swings.iloc[i]['to_plot'] == 'low':
+            ax.plot([swings.iloc[i - 1]['date'], swings.iloc[i]['date']],
+                    [swings.iloc[i - 1]['high'], swings.iloc[i]['low']], 'r-')
+        elif swings.iloc[i - 1]['to_plot'] == 'low' and swings.iloc[i]['to_plot'] == 'high':
+            ax.plot([swings.iloc[i - 1]['date'], swings.iloc[i]['date']],
+                    [swings.iloc[i - 1]['low'], swings.iloc[i]['high']], 'g-')
+
+    plt.show()
 
 
 def _parse_data_set(data: pd.DataFrame) -> list[Bar]:
@@ -127,15 +148,16 @@ def _parse_data_set(data: pd.DataFrame) -> list[Bar]:
     return data_set_bars
 
 
-def main() -> None:  # noqa: D103
+def main() -> None:
     data = pd.read_csv('.././data/BTCUSDT86400.csv')
     data['date'] = data['date'].astype('datetime64[s]')
 
     data_set_bars: list[Bar] = _parse_data_set(data)
-    swing_extremes = detect_swing_extremes_across_data_set(data_set_bars, time_radius=2)
+    swing_extremes = detect_swing_extremes_across_data_set(data_set_bars, time_radius=1)
 
-    # logging.info("Swing Extremes")
-    # logging.info(swing_extremes)
+    pprint(swing_extremes, compact=False)
+
+    # plot_ohlc_with_swings(data, swing_extremes)
 
 
 if __name__ == '__main__':

@@ -143,3 +143,4 @@ class TestSwingChartCandlePlotter:
 
         # Assert the results
         pd.testing.assert_frame_equal(result, expected_df)
+

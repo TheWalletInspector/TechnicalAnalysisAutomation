@@ -2,6 +2,8 @@ import logging
 from dataclasses import dataclass
 from enum import Enum, auto
 
+import matplotlib.pyplot as plt
+import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
@@ -105,10 +107,6 @@ def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius:
 
     return pd.DataFrame([vars(extreme) for extreme in swing_extremes],
                         columns=["index", "date", "high", "low", "open", "close", "volume", "bar_type", "to_plot"])
-
-
-import matplotlib.pyplot as plt
-import mplfinance as mpf
 
 
 def plot_ohlc_with_swings(data: pd.DataFrame, swings: pd.DataFrame) -> None:
