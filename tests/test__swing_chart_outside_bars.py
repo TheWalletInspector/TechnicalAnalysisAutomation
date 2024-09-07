@@ -9,7 +9,15 @@ from technical_analysis_automation.swing_chart_candle_plotter import (
 
 class TestSwingChartOutsideBars:
     def test__detect_swing_extremes_across_data_set__1bar(self) -> None:
-        # Outside-bar should only have one swing extreme at the top
+        # Outside-bar should have 2 swing extremes at the top first then bottom.
+        """
+                |
+            _|  |
+          |  |  |
+        |    |_
+             |
+        """
+
         data = {
             'date': pd.date_range(start='2023-01-01', periods=4, freq='D'),
             'high': [2.2, 3.5, 4, 5],
@@ -41,9 +49,9 @@ class TestSwingChartOutsideBars:
         }
         expected_df = pd.DataFrame(expected_data)
 
-        print("actual results:")
+        print("\nActual Results:")
         print(result)
-        print("expected results:")
+        print("\nExpected Results:")
         print(expected_df)
 
         # Assert the results

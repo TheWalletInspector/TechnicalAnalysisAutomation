@@ -8,10 +8,11 @@ import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
-# logging.basicConfig(level=logging.INFO)
+# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 
+# Define Enums and Data Classes
 class BarType(Enum):
     UP_BAR = auto()
     DOWN_BAR = auto()
@@ -32,6 +33,7 @@ class Bar:
     to_plot: str | None = None
 
 
+# Define Helper Functions
 def _detect_bar_type(current_bar: Bar, previous_bar: Bar) -> BarType:
     if current_bar.high > previous_bar.high and current_bar.low >= previous_bar.low:
         return BarType.UP_BAR
@@ -64,11 +66,6 @@ def _is_local_extreme(data_set_bars: list[Bar], current_index: int, time_radius:
         return False
 
     data_set_array = np.array([bar.high if comparison_operator == np.max else bar.low for bar in data_set_bars])
-
-    # print("is_local_extreme")
-    # print(f"comparison_operator: {comparison_operator.__name__}")
-    # print(f"data_set_array: {data_set_array}")
-
     start = max(0, current_index - time_radius)
     end = min(len(data_set_array), current_index + time_radius + 1)
     window = data_set_array[start:end]
@@ -79,7 +76,8 @@ def _is_local_extreme(data_set_bars: list[Bar], current_index: int, time_radius:
     return bool(is_extreme)
 
 
-def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius: int) -> pd.DataFrame:  # noqa: D103
+# Define Main Functions
+def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius: int) -> pd.DataFrame:
     swing_extremes = []
     for index, current_bar in enumerate(data_set_bars):
         previous_bar = data_set_bars[index - 1] if index > 0 else None
@@ -89,9 +87,7 @@ def detect_swing_extremes_across_data_set(data_set_bars: list[Bar], time_radius:
             if current_bar.bar_type == BarType.INSIDE_BAR:
                 continue
 
-            comparison_operators = _get_comparison_operators(bar_type=current_bar.bar_type, current_bar=current_bar)
-
-            for operator in comparison_operators:
+            for operator in _get_comparison_operators(bar_type=current_bar.bar_type, current_bar=current_bar):
                 if _is_local_extreme(data_set_bars, current_bar.index, time_radius, operator):
                     to_plot_value = "high" if operator == np.max else "low"
 
@@ -148,6 +144,7 @@ def _parse_data_set(data: pd.DataFrame) -> list[Bar]:
     return data_set_bars
 
 
+# Main Execution
 def main() -> None:
     data = pd.read_csv('.././data/BTCUSDT86400.csv')
     data['date'] = data['date'].astype('datetime64[s]')
@@ -156,7 +153,6 @@ def main() -> None:
     swing_extremes = detect_swing_extremes_across_data_set(data_set_bars, time_radius=1)
 
     pprint(swing_extremes, compact=False)
-
     # plot_ohlc_with_swings(data, swing_extremes)
 
 
